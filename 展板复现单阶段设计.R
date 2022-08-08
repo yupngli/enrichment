@@ -1,12 +1,14 @@
 #######################################################################
 #
-# Pfizer- Sequential Enrichment Designs for Early Phase Clinical Trials
+# Pfizer- One Stage Enrichment Designs for Early Phase Clinical Trials
 #
 #######################################################################
 
 library(dplyr)
 library(ggplot2)
 library(Rcpp)
+
+start_time <- Sys.time()
 
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 # 0: 导入计算后验的c++外部函数
@@ -250,7 +252,7 @@ scen4 <- simoc(orr_plus_4,
                y_minus_gate,
                rep)
 
-# 汇报结果
+# 汇报结果 - 与壁报的Figure 6.2 OC for One stage Enrichment Design 对比
 result <- data.frame(scenario=rep(NA,4),
                      prob_eff_full=rep(NA,4),
                      prob_eff_positive=rep(NA,4))
@@ -273,3 +275,6 @@ result[4,"prob_eff_positive"] <- mean(scen4$succ_y_pos)*100
 
 result
 
+# 评估程序运行时间
+end_time <- Sys.time()
+end_time-start_time

@@ -8,6 +8,9 @@ library(dplyr)
 library(ggplot2)
 library(Rcpp)
 library(reshape2)
+library(stargazer) # 给txt输出排版用的包
+
+#setwd("C:/Users/yli01/OneDrive - lianbio/working/Enrichment/enrichment/序贯富集_多阶段序贯设计")
 
 start_time <- Sys.time()
 
@@ -16,8 +19,8 @@ start_time <- Sys.time()
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 sourceCpp('function_cpp.cpp')
-sourceCpp('序贯富集_多阶段序贯设计/predprobMedian.cpp')
-sourceCpp('序贯富集_多阶段序贯设计/predprobPosterior.cpp')
+sourceCpp('predprobMedian.cpp')
+sourceCpp('predprobPosterior.cpp')
 
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 # 主程序1: 寻找中期分析的决策边界
@@ -371,8 +374,16 @@ result[2,"prob_eff_positive_FA"] <- mean(scen2$succ_overall_y_pos)*100
 result[3,"prob_eff_positive_FA"] <- mean(scen3$succ_overall_y_pos)*100
 result[4,"prob_eff_positive_FA"] <- mean(scen4$succ_overall_y_pos)*100
 
-result
-
 # 评估程序运行时间
 end_time <- Sys.time()
-end_time-start_time
+
+# 打印到txt文件
+stargazer(result,
+          title = "Interim & Final OC for Sequential Enrichment Design",
+          summary = FALSE,
+          rownames = FALSE,
+          type = "text",
+          align = TRUE,
+          out = "两阶段富集设计OC.txt",
+          notes = paste0("程序运行用时",as.character.Date(end_time-start_time),", 可对比辉瑞壁报Figure 8.2与Figure 8.3"),
+          notes.align = "l")

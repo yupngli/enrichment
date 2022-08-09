@@ -7,6 +7,7 @@
 library(dplyr)
 library(ggplot2)
 library(Rcpp)
+library(stargazer) # 给txt输出排版用的包
 
 start_time <- Sys.time()
 
@@ -14,6 +15,7 @@ start_time <- Sys.time()
 # 0: 导入计算后验的c++外部函数
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
+#setwd("C:/Users/yli01/OneDrive - lianbio/working/Enrichment/enrichment")
 sourceCpp('function_cpp.cpp')
 
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
@@ -210,7 +212,7 @@ simoc <- function(orr_plus,
   return(simmat)
 }
 
-rep = 5000
+rep = 12000
 
 scen1 <- simoc(orr_plus_1,
                orr_minus_1,
@@ -273,8 +275,17 @@ result[2,"prob_eff_positive"] <- mean(scen2$succ_y_pos)*100
 result[3,"prob_eff_positive"] <- mean(scen3$succ_y_pos)*100
 result[4,"prob_eff_positive"] <- mean(scen4$succ_y_pos)*100
 
-result
-
 # 评估程序运行时间
 end_time <- Sys.time()
 end_time-start_time
+
+# 输出TXT
+stargazer(result,
+          title = "OC for One stage Enrichment Design",
+          summary = FALSE,
+          rownames = FALSE,
+          type = "text",
+          align = TRUE,
+          out = "单阶段富集设计OC.txt",
+          notes = paste0("程序运行用时",as.character.Date(end_time-start_time),", 可对比辉瑞壁报Figure 6.2"),
+          notes.align = "l")

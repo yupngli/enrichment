@@ -10,7 +10,7 @@ library(Rcpp)
 library(reshape2)
 library(stargazer) # 给txt输出排版用的包
 
-#setwd("C:/Users/yli01/OneDrive - lianbio/working/Enrichment/enrichment/序贯富集_多阶段序贯设计")
+setwd("C:/Users/yli01/OneDrive - lianbio/working/Enrichment/enrichment/序贯富集_多阶段序贯设计")
 
 start_time <- Sys.time()
 
@@ -27,7 +27,7 @@ sourceCpp('predprobPosterior.cpp')
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 
 # 先验
-beta_a = 0.1904762 #先验变化会对minimum sample size有影响，就算是无信息先验
+beta_a = 0.1904762 #a/a+b=0.16倒推,先验变化会对minimum sample size有影响，就算是无信息先验
 beta_b = 1
 
 # 双标准决策中的边界
@@ -89,6 +89,10 @@ p <- ggplot(data=result_df_t, mapping = aes(x=r,y=value)) +
         panel.grid.major.x = element_line(colour = "grey70",linetype = "longdash"))
 p
 
+#-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+# 主程序1.5.1: 第一阶段的决策边界
+#-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+
 # 打印决策边界
 result_df_t_decision <- result_df_t %>%
   mutate(gt10=ifelse(value>0.1,TRUE,FALSE),
@@ -105,6 +109,8 @@ cat("The Go decision for full population is responders >= ",F_dec_r)
 
 ### Continue with Y+
 ### 从上面的图中可以看出，当full人群的中期条件满足（50人里观察到10个full人群responders）,此时去检查y-人群，responders>=3时可以满足Full期中的决策边界
+### condition1: 药物在full人群展示出效果，Y-无效，Y+人群有效，拓展至Y+富集
+### condition2: enrichment定义，药物在full人群展示不出效果，Y+人群有效，拓展至Y+富集
 y_plus_dec <- result_df %>% 
   mutate(cond1 = ifelse(fullpp>=0.1 & yminuspp<0.1 & ypluspp>=0.1,TRUE,FALSE),
          cond2 = ifelse(fullpp<0.1 & ypluspp>=0.1,TRUE,FALSE),
@@ -117,7 +123,64 @@ y_plus_dec2 <- y_plus_dec %>%
 y_plus_dec_r <- max(y_plus_dec2$r)
 cat("The Go decision for Y+ population is responders >= ",y_plus_dec_r)
 
+### Continue with Y- if it continues with Full
+y_minus_dec <- result_df %>% 
+  mutate(cond1 = ifelse(yminuspp>=0.1,TRUE,FALSE))
 
+y_minus_dec2 <- y_minus_dec %>%
+  filter(cond1 == TRUE) %>%
+  slice(which.min(r))
+
+y_minus_dec_r <- max(y_minus_dec2$r)
+cat("The Go decision for Y- population is responders >= ",y_minus_dec_r)
+
+#-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+# 主程序1.5.2: 第二阶段的决策边界
+#-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
+
+finalstage.df <- as.data.frame(responsegate(maxresponse = 30,
+                                 samplesizestart = 40,
+                                 maxsamplesize = 100,
+                                 a = beta_a,
+                                 b = beta_b,
+                                 nv = nv,
+                                 positivestatsig = 0.95,
+                                 statsig = 0.975,
+                                 postmed = postmed))
+colnames(finalstage.df) <- c("r","n","significance","postmedian","justmedfl","bothfl","tripfl","group")
+
+# 删去不满足任何标准的行记录
+finalstage.df2 <- filter(finalstage.df,justmedfl==1 | bothfl==1 | tripfl==1)
+
+# recode
+finalstage.df2 <- finalstage.df2 %>%
+  mutate(group=recode(group,'2'="full",'3'="positive only",'4'="n/a"))
+
+## 最小样本量逻辑：按照n分组，找到最小的那个significance，因为一旦满足当前的要求，
+## 则对于这个n，比当前significance对应的r更大的r，它的significance肯定更高
+
+finalstage.df3 <- finalstage.df2 %>% 
+  group_by(n) %>% 
+  slice(which.min(significance))
+
+allcomers = full_n_total
+y_plus = y_plus_n_total
+y_minus = allcomers-y_plus
+
+# 基于100人总样本量，60人Y+，40人Y-,去数据集df_cc_plot里寻找对应的responder gate
+responder_gate_final <- finalstage.df3 %>% 
+  filter(n == allcomers | n==y_plus | n==y_minus) %>%
+  select(c(r,n))
+
+full_FA_gate <- responder_gate_final[which(responder_gate_final$n==allcomers),1]$r
+y_plus_FA_gate <- responder_gate_final[which(responder_gate_final$n==y_plus),1]$r
+
+#最后阶段Y-的responder gate
+y_minus_dec_final <- finalstage.df %>% filter(n==y_minus_n_total & significance>=0.75)
+
+y_minus_dec2_final <- y_minus_dec_final %>%
+  slice(which.min(r))
+y_minus_FA_gate <- y_minus_dec2_final$r
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
 # 主程序2: 评估设计的OC
 #-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*
@@ -145,6 +208,16 @@ y_plus_overall <- y_plus_n_total
 y_minus_overall <- y_minus_n_total
 rep <- 5000
 
+# 设置responder threshold,从上面的试验设计中得来
+full_IA_gate <- F_dec_r
+full_FA_gate <- full_FA_gate
+
+y_plus_IA_gate <- y_plus_dec_r
+y_plus_FA_gate <- y_plus_FA_gate
+
+y_minus_IA_gate <- y_minus_dec_r
+y_minus_FA_gate <- y_minus_FA_gate
+
 simseqoc <- function(orr_plus,
                   orr_minus,
                   allcomers_ia,
@@ -153,17 +226,13 @@ simseqoc <- function(orr_plus,
                   allcomers_overall,
                   y_plus_overall,
                   y_minus_overall,
+                  full_IA_gate,
+                  full_FA_gate,
+                  y_plus_IA_gate,
+                  y_plus_FA_gate,
+                  y_minus_IA_gate,
+                  y_minus_FA_gate,
                   rep){
-  
-  # 设置responder threshold,从上面的试验设计中得来
-  full_IA_gate <- 10
-  full_FA_gate <- 25
-  
-  y_plus_IA_gate <- 6
-  y_plus_FA_gate <- 15
-  
-  y_minus_IA_gate <- 3
-  y_minus_FA_gate <- 9
   
   # 初始化模拟矩阵, s1: stage 1; s2: stage 2; overall=s1+s2
   simmat <- data.frame(orr_plus=rep(NA,rep),
@@ -219,18 +288,18 @@ simseqoc <- function(orr_plus,
     SUCC_YPlus <- FALSE
     FA_FAIL <- FALSE
     ## S1的决策部分
-    if (total_resp_ia>=10){
-      if (resp_y_minus_ia>=3){
+    if (total_resp_ia>=full_IA_gate){
+      if (resp_y_minus_ia>=y_minus_IA_gate){
         IA_go_withF <- TRUE
-      } else if (resp_y_minus_ia<3){
-        if (resp_y_plus_ia>=6){
+      } else if (resp_y_minus_ia<y_minus_IA_gate){
+        if (resp_y_plus_ia>=y_plus_IA_gate){
           IA_go_withYPlus <- TRUE
         } else {
           IA_ET <- TRUE
         }
       }
-    } else if (total_resp_ia<10){
-      if (resp_y_plus_ia>=6){
+    } else if (total_resp_ia<full_IA_gate){
+      if (resp_y_plus_ia>=y_plus_IA_gate){
         IA_go_withYPlus <- TRUE
       } else {
         IA_ET <- TRUE
@@ -303,6 +372,12 @@ scen1 <- simseqoc(orr_plus_1,
                allcomers_overall,
                y_plus_overall,
                y_minus_overall,
+               full_IA_gate,
+               full_FA_gate,
+               y_plus_IA_gate,
+               y_plus_FA_gate,
+               y_minus_IA_gate,
+               y_minus_FA_gate,
                rep)
 
 scen2 <- simseqoc(orr_plus_2,
@@ -313,6 +388,12 @@ scen2 <- simseqoc(orr_plus_2,
                allcomers_overall,
                y_plus_overall,
                y_minus_overall,
+               full_IA_gate,
+               full_FA_gate,
+               y_plus_IA_gate,
+               y_plus_FA_gate,
+               y_minus_IA_gate,
+               y_minus_FA_gate,
                rep)
 
 scen3 <- simseqoc(orr_plus_3,
@@ -323,6 +404,12 @@ scen3 <- simseqoc(orr_plus_3,
                allcomers_overall,
                y_plus_overall,
                y_minus_overall,
+               full_IA_gate,
+               full_FA_gate,
+               y_plus_IA_gate,
+               y_plus_FA_gate,
+               y_minus_IA_gate,
+               y_minus_FA_gate,
                rep)
 
 scen4 <- simseqoc(orr_plus_4,
@@ -333,6 +420,12 @@ scen4 <- simseqoc(orr_plus_4,
                allcomers_overall,
                y_plus_overall,
                y_minus_overall,
+               full_IA_gate,
+               full_FA_gate,
+               y_plus_IA_gate,
+               y_plus_FA_gate,
+               y_minus_IA_gate,
+               y_minus_FA_gate,
                rep)
 
 # 汇报结果 - 与壁报的Figure 6.2 OC for One stage Enrichment Design 对比

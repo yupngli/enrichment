@@ -133,12 +133,20 @@ y_minus = allcomers-y_plus
 
 # 基于100人总样本量，60人Y+，40人Y-,去数据集df_cc_plot里寻找对应的responder gate
 responder_gate <- df_cc_plot %>% 
-  filter(n == 100 | n==60 | n==40) %>%
+  filter(n == allcomers | n==y_plus | n==y_minus) %>%
   select(c(r,n))
 
 full_gate <- responder_gate[which(responder_gate$n==allcomers),1]$r
 y_plus_gate <- responder_gate[which(responder_gate$n==y_plus),1]$r
-y_minus_gate <- responder_gate[which(responder_gate$n==y_minus),1]$r
+
+# Y-的responders
+Y_minus_significance <- 0.75
+
+y_minus_dec <- df %>% filter(n==y_minus & significance>=Y_minus_significance)
+
+y_minus_dec2 <- y_minus_dec %>%
+  slice(which.min(r))
+y_minus_gate <- y_minus_dec2$r
 
 # 不同场景的orr假设
 ## 1
